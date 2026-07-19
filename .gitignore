@@ -1,0 +1,28 @@
+# Veri seti — repoya commitlenmez, download_data.py ile indirilir
+datasets/
+
+# Eğitim çıktıları ve ağırlıklar — büyük dosyalar
+runs/
+weights/
+*.pt
+
+# Değerlendirme/çıkarım çıktıları
+results/
+predictions/
+
+# Ortam değişkenleri (API anahtarları)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
