@@ -5,7 +5,7 @@ Kullanım:
     python download_data.py
 
 Veri seti: license-plates-of-vehicles-in-turkey (CC BY 4.0)
-https://universe.roboflow.com/kemalkilicaslan-gzpvq/license-plates-of-vehicles-in-turkey-s3tbj
+https://universe.roboflow.com/tr-plaka-recognition/license-plates-of-vehicles-in-turkey-s3tbj-s5lcc
 """
 
 import os
@@ -19,8 +19,8 @@ try:
 except ImportError:
     pass
 
-WORKSPACE = "kemalkilicaslan-gzpvq"
-PROJECT = "license-plates-of-vehicles-in-turkey-s3tbj"
+WORKSPACE = "tr-plaka-recognition"
+PROJECT = "license-plates-of-vehicles-in-turkey-s3tbj-s5lcc"
 DATASET_DIR = Path("datasets")
 
 

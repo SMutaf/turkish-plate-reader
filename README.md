@@ -59,7 +59,7 @@ Veri `datasets/turkish-plates/` altına YOLOv8 formatında iner
 kullanılır; YOLOv8'in eğitim-anı augmentation'ı ayrıca varsayılan ayarlarla
 açıktır.
 
-**Veri seti:** [License Plates of Vehicles in Turkey](https://universe.roboflow.com/kemalkilicaslan-gzpvq/license-plates-of-vehicles-in-turkey-s3tbj)
+**Veri seti:** [License Plates of Vehicles in Turkey](https://universe.roboflow.com/tr-plaka-recognition/license-plates-of-vehicles-in-turkey-s3tbj-s5lcc)
 — 3.501 görüntü, tek sınıf (`license plate`), lisans: **CC BY 4.0** (atıf için
 aşağıya bakın).
 
@@ -94,17 +94,22 @@ val metrikleri `results/metrics.md`'ye, örnek tahmin görüntüleri
 
 ## Değerlendirme sonuçları
 
-Aşağıdaki tablo, eğitim tamamlandıktan sonra `results/metrics.md`'den (veya
-Colab notebook'unun 6. hücresinin çıktısından) doldurulacaktır:
+YOLOv8n, 50 epoch, imgsz=640, batch=8 (GTX 1650, 4 GB) ile eğitildi.
+Val seti (345 görüntü) üzerinde:
 
 | Metrik | Değer |
 |---|---|
-| mAP@0.5 | _eğitim sonrası doldurulacak_ |
-| mAP@0.5:0.95 | _eğitim sonrası doldurulacak_ |
-| Precision | _eğitim sonrası doldurulacak_ |
-| Recall | _eğitim sonrası doldurulacak_ |
+| mAP@0.5 | **0.9375** |
+| mAP@0.5:0.95 | **0.7514** |
+| Precision | 0.8397 |
+| Recall | 0.9345 |
 
-Örnek val tahminleri (kutular çizilmiş) `results/val_predictions/` klasöründe.
+Örnek tespit (val setinden, güven skorlarıyla):
+
+![Örnek plaka tespiti](docs/samples/ornek-tespit.jpg)
+
+Kutu çizilmiş diğer örnek tahminler eğitim sonrası `results/val_predictions/`
+klasörüne kaydedilir.
 
 ## Çıkarım (predict.py)
 
@@ -131,8 +136,13 @@ Varsayılan güven eşiği `--conf 0.25`'tir.
   Roboflow Universe — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
   > Kılıçaslan, K. *License Plates of Vehicles in Turkey* [Veri seti].
-  > Roboflow Universe.
-  > https://universe.roboflow.com/kemalkilicaslan-gzpvq/license-plates-of-vehicles-in-turkey-s3tbj
+  > Roboflow Universe. Lisans: CC BY 4.0.
+
+  Bu proje, aynı veri setinin herkese açık bir kopyasından indirir:
+  https://universe.roboflow.com/tr-plaka-recognition/license-plates-of-vehicles-in-turkey-s3tbj-s5lcc
+  (yazarın orijinal `kemalkilicaslan-gzpvq` çalışma alanındaki sürüm indirme
+  sırasında herkese açık değildi). İçerik aynıdır; CC BY 4.0 gereği atıf orijinal
+  yaratıcı Kemal Kılıçaslan'adır.
 
 Veri seti ve eğitilmiş ağırlıklar bu repoda **dağıtılmaz**; veriyi yukarıdaki
 adımlarla kendiniz indirin.
