@@ -1,20 +1,27 @@
-# Türk Plaka Tespiti — YOLOv8 (Aşama 1)
+# Türk Plaka Okuma — YOLOv8 + OCR (İki Aşamalı)
 
-Türk araç plakalarını okuyan iki aşamalı bir sistemin **1. aşaması**: görüntüdeki
-plakanın **yerini** tespit eden bir YOLOv8n modeli. Bu aşama yalnızca tespit
-(lokalizasyon) yapar; tespit edilen plaka bölgesi kırpılıp kaydedilir ve
-2. aşamadaki karakter okuma (OCR) modülünün girdisi olur.
+Türk araç plakalarını uçtan uca okuyan iki aşamalı bir sistem:
 
-> **Aşama 2 — OCR entegrasyonu planlanıyor.** Bu repo şimdilik yalnızca tespit
-> modelini içerir.
+- **Aşama 1 — Tespit:** Görüntüde plakanın **yerini** bulan bir YOLOv8n modeli;
+  tespit edilen plaka bölgesini kırpar.
+- **Aşama 2 — OCR:** Kırpılan plakadan **metni** okuyan katman
+  (EasyOCR + Türk plaka format doğrulaması) → `34 ABC 123`.
+
+Aşağıda uçtan uca bir örnek — plaka tespit edilip okunmuş (yeşil kutu = tespit,
+üstteki etiket = OCR'ın okuduğu metin):
+
+![Uçtan uca plaka okuma örneği](docs/samples/ornek-ocr.jpg)
 
 ## Repo yapısı
 
 ```
 ├── download_data.py   # Roboflow'dan veri indirme (API anahtarı env'den)
-├── train.py           # Yerel eğitim + değerlendirme
-├── train.ipynb        # Google Colab notebook — önerilen eğitim yöntemi
-├── predict.py         # Çıkarım: kutu çizme + plaka kırpma
+├── train.py           # Aşama 1: yerel eğitim + değerlendirme
+├── train.ipynb        # Aşama 1: Google Colab notebook (önerilen eğitim yöntemi)
+├── resume_training.py # Kesilen eğitimi kontrol noktasından sürdürme
+├── predict.py         # Aşama 1: tespit + plaka kırpma
+├── ocr.py             # Aşama 2: kırpılmış plaka → metin (EasyOCR + doğrulama)
+├── pipeline.py        # Uçtan uca: tespit + OCR
 └── requirements.txt
 ```
 
@@ -128,6 +135,43 @@ python predict.py --source foto_klasoru/ --conf 0.4 --out predictions
   bunlar Aşama 2'deki OCR'ın girdisi olacak)
 
 Varsayılan güven eşiği `--conf 0.25`'tir.
+
+## Aşama 2 — OCR (Plaka Okuma)
+
+Kırpılan plaka bölgesi `ocr.py` ile metne çevrilir. Boru hattı:
+
+1. **Ön işleme:** gri tonlama, büyütme, gürültü azaltma (bilateral filtre),
+   kontrast (CLAHE) ve keskinleştirme.
+2. **OCR:** [EasyOCR](https://github.com/JaidedAI/EasyOCR) ile karakter okuma
+   (yalnızca plaka karakterlerine izin verilir: `0-9` ve `A-Z`).
+3. **Türk plaka doğrulaması:** çıktı `2 rakam (il 01–81) + 1–3 harf + 2–4 rakam`
+   desenine oturtulur; konuma göre karışıklıklar düzeltilir (rakam beklenen yerde
+   `O→0, I→1, S→5`; harf beklenen yerde tersi) ve **en az düzeltme** gerektiren
+   bölünme seçilir.
+
+### Kullanım
+
+```bash
+# Uçtan uca (tespit + OCR), tek görüntü veya klasör
+python pipeline.py --source foto.jpg
+python pipeline.py --source test_fotolarim/ --conf 0.25 --out pipeline_out
+
+# Yalnızca OCR (kırpılmış plakalar üzerinde)
+python ocr.py --source predictions/crops
+```
+
+Okunan plaka metni görüntü üzerine yazılıp `pipeline_out/` altına kaydedilir.
+
+### Sınırlar ve dürüst değerlendirme
+
+- **Net/yakın plakalarda** doğru okur (yukarıdaki `54 ZP 236` örneği).
+- **Çok küçük/bulanık plakalarda** (≈40 piksel altı) doğruluk düşer — bu, kaynak
+  görüntü çözünürlüğünün fiziksel sınırıdır, ön işlemeyle aşılamaz.
+- Bir **karakter-düzeyi YOLO** (36 sınıf) alternatifi de denendi; ancak hazır,
+  küçük ve alan-uyuşmazlıklı bir veri setiyle eğitilen model gerçek Türk
+  plakalarında EasyOCR'ın gerisinde kaldı (kendi doğrulama setinde yüksek skora
+  rağmen). Verimli olması için **büyük ve Türk plakalarına uygun, karakter-etiketli
+  bir veri seti** gerekir — gelecekteki iyileştirme yolu budur.
 
 ## Lisans ve atıf
 

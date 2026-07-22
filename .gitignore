@@ -9,6 +9,10 @@ weights/
 # Değerlendirme/çıkarım çıktıları
 results/
 predictions/
+pipeline_out/
+
+# Kişisel test fotoğrafları (repoya dahil edilmez)
+test_fotolarim/
 
 # Ortam değişkenleri (API anahtarları)
 .env
