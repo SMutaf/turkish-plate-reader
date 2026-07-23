@@ -17,12 +17,16 @@ test_fotolarim/
 # Ortam değişkenleri (API anahtarları)
 .env
 
+# Yerel yapılandırma (şablon: config.example.yaml commit'lenir)
+config.yaml
+
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 venv/
+client/.venv/
 
 # Jupyter
 .ipynb_checkpoints/

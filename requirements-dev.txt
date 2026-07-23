@@ -1,0 +1,2 @@
+# Geliştirme/test bağımlılıkları (sunucu veya istemci çalıştırmak için gerekmez).
+pytest==8.3.3

@@ -1,0 +1,5 @@
+# İSTEMCİ bağımlılıkları — kamerada çalışır, MODEL/GPU YOK.
+# torch, ultralytics, easyocr KESİNLİKLE YOK; tüm çıkarım sunucuda yapılır.
+# Ayarlar komut satırından alınır, bu yüzden yaml bağımlılığı da yoktur.
+opencv-python==5.0.0.93
+requests==2.31.0

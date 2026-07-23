@@ -1,7 +1,20 @@
-ultralytics>=8.2.0
-roboflow>=1.1.30
-torch>=2.0.0
-torchvision>=0.15.0
-opencv-python>=4.8.0
-python-dotenv>=1.0.0
-easyocr>=1.7.0
+# SUNUCU bağımlılıkları (GPU'lu makine). Sürümler kurulu ortamdan pinlenmiştir.
+# İstemci için client/requirements.txt, testler için requirements-dev.txt kullanın.
+#
+# NOT: torch/torchvision CUDA (cu126) derlemeleridir. Kurulum:
+#   pip install torch==2.13.0+cu126 torchvision==0.28.0+cu126 \
+#       --index-url https://download.pytorch.org/whl/cu126
+#   pip install -r requirements.txt
+# CPU-only kurulumda torch/torchvision satırlarındaki '+cu126' son ekini kaldırın.
+
+ultralytics==8.4.102
+roboflow==1.3.13
+torch==2.13.0+cu126
+torchvision==0.28.0+cu126
+opencv-python==5.0.0.93
+python-dotenv==1.0.1
+easyocr==1.7.2
+pydantic==2.9.2
+fastapi==0.115.0
+uvicorn==0.30.6
+python-multipart==0.0.32
