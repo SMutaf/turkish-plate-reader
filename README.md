@@ -1,45 +1,45 @@
-# Türk Plaka Okuma — İstemci/Sunucu Çıkarım Servisi
+# Turkish License Plate Reader — Client/Server Inference Service
 
-Türk araç plakalarını okuyan iki aşamalı bir sistem (araç + plaka tespiti → OCR),
-GPU'lu bir **sunucuda** çalışan çıkarım servisi ve kamerada çalışan **ince bir
-HTTP istemcisi** olarak paketlenmiştir. Çıktı yalnızca JSON'dur.
+A two-stage system (vehicle + plate detection → OCR) that reads Turkish vehicle
+license plates. It is packaged as a GPU-side **inference server** and a **thin
+HTTP client** that runs on the camera. The output is JSON only.
 
-## Ekran görüntüsü (gerçek sistem çıktısı)
+## Screenshot (real system output)
 
-Aşağıdaki görüntü, istemcinin `/v1/infer` cevabını çizmesiyle üretildi (araç
-kutuları + `track_id` + sınıf/güven, plaka kutusu ve okunan metin, köşede
-FPS/RTT/atılan kare):
+The image below was produced by the client drawing a real `/v1/infer` response
+(vehicle boxes + `track_id` + class/confidence, plate box and the read text, with
+FPS/RTT/dropped-frames in the corner):
 
-![Sistem çıktısı](docs/samples/system-output.jpg)
+![System output](docs/samples/system-output.jpg)
 
-## Mimari
+## Architecture
 
-Modeller **yalnızca sunucuda**; kamerada çalışan istemcide model, GPU veya torch
-yoktur.
+Models live **only on the server**; the camera-side client has no model, no GPU
+and no torch.
 
 ```mermaid
 flowchart LR
-    subgraph cam["Kamera tarafı — ince istemci"]
-        C["camera_client.py<br/>webcam / video / rtsp<br/>opencv + requests (model YOK)"]
+    subgraph cam["Camera side — thin client"]
+        C["camera_client.py<br/>webcam / video / rtsp<br/>opencv + requests (NO model)"]
     end
-    subgraph srv["Sunucu tarafı — GPU"]
+    subgraph srv["Server side — GPU"]
         A["FastAPI<br/>POST /v1/infer"]
-        V["Araç tespiti<br/>yolov8n COCO + ByteTrack"]
-        P["Plaka tespiti<br/>weights/best.pt"]
-        O["Eşleştirme + EasyOCR<br/>+ oy toplama"]
+        V["Vehicle detection<br/>yolov8n COCO + ByteTrack"]
+        P["Plate detection<br/>weights/best.pt"]
+        O["Matching + EasyOCR<br/>+ vote aggregation"]
     end
-    C -- "JPEG kare (POST)" --> A
+    C -- "JPEG frame (POST)" --> A
     A --> V
     A --> P
     V --> O
     P --> O
-    O -- "JSON cevap" --> C
+    O -- "JSON response" --> C
 ```
 
-## Örnek cevap (`POST /v1/infer`)
+## Example response (`POST /v1/infer`)
 
-Aşağıdaki JSON **gerçek bir çalıştırmadan** alınmıştır (kısaltılmış: cevapta
-toplam 10 araç vardı, biri plakalı biri plakasız olmak üzere 2'si gösteriliyor):
+The JSON below is from a **real run** (truncated: the response contained 10
+vehicles in total; 2 are shown — one with a plate, one without):
 
 ```json
 {
@@ -75,169 +75,178 @@ toplam 10 araç vardı, biri plakalı biri plakasız olmak üzere 2'si gösteril
 }
 ```
 
-- Tüm `box` değerleri `[x1,y1,x2,y2]` tamsayı piksel, sunucunun işlediği
-  `frame_w × frame_h` düzleminde.
-- `plate.valid` tüketicinin bakacağı tek karar bayrağıdır; `text` geçersizken
-  bile en iyi tahmini verir. `votes` sonucu destekleyen okuma sayısıdır.
-- Hiç araç yoksa `vehicles` boş liste döner (hata değil).
+- All `box` values are integer pixels `[x1,y1,x2,y2]` in the server's processed
+  `frame_w × frame_h` plane.
+- `plate.valid` is the single decision flag consumers should read; `text` returns
+  the best guess even when invalid. `votes` is the number of readings supporting
+  the result.
+- If there are no vehicles, `vehicles` is an empty list (not an error).
 
-## Hızlı başlangıç
+## Quick start
 
-> **Tüm komutlar repo kökünden çalıştırılır** (`shared/`, `server/`, `client/`
-> paket olarak buradan çözümlenir). Komutlar Windows (PowerShell) içindir.
+> **All commands are run from the repository root** (`shared/`, `server/`,
+> `client/` are resolved as packages from here). Commands are for Windows
+> (PowerShell).
 
-### Sunucu ortamı (GPU'lu makine)
+### Server environment (GPU machine)
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 
-# ⚠️ torch'u DOĞRU CUDA varyantıyla kurun, yoksa GPU sessizce kaybolur.
-# Bu makinede CUDA 12.6 -> cu126 index. Kartınıza göre index-url değişir.
+# ⚠️ Install torch with the CORRECT CUDA variant, otherwise GPU silently disappears.
+# This machine uses CUDA 12.6 -> cu126 index. The index-url depends on your card.
 pip install torch==2.13.0+cu126 torchvision==0.28.0+cu126 `
     --index-url https://download.pytorch.org/whl/cu126
 pip install -r requirements.txt
 
-# ⚠️ TEK worker ZORUNLU: çoklu worker model belleğini kopyalar, 4 GB kartta taşar.
+# ⚠️ --workers 1 is MANDATORY: multiple workers copy the model into memory and
+#    will overflow a 4 GB card.
 uvicorn server.app:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-`torch` doğrulaması: `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"`
-→ `2.13.0+cu126 True` görmelisiniz. `+cu126` yerine `+cpu` görüyorsanız index-url
-adımı atlanmış demektir.
+Verify torch: `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"`
+→ you should see `2.13.0+cu126 True`. If you see `+cpu` instead, the index-url
+step was skipped.
 
-Ayarlar: `copy config.example.yaml config.yaml` (yoksa varsayılanlarla çalışır).
-Öncelik: **CLI > ortam değişkeni (`PLATE_*`) > config.yaml > varsayılan**.
+Config: `copy config.example.yaml config.yaml` (runs with defaults if absent).
+Precedence: **CLI > environment variable (`PLATE_*`) > config.yaml > default**.
 
-### İstemci ortamı (kamera makinesi — model/GPU YOK)
+### Client environment (camera machine — NO model/GPU)
 
 ```powershell
 python -m venv client\.venv
 client\.venv\Scripts\Activate.ps1
-pip install -r client\requirements.txt      # yalnızca opencv-python + requests
+pip install -r client\requirements.txt      # only opencv-python + requests
 
-python client\camera_client.py --server http://SUNUCU:8000 --camera-id kapi1 --source 0 --fps 5
-python client\camera_client.py --source video.mp4 --headless          # video, GUI'siz
-python client\camera_client.py --source "rtsp://kullanici:sifre@ip:554/stream"
+python client\camera_client.py --server http://SERVER:8000 --camera-id gate1 --source 0 --fps 5
+python client\camera_client.py --source video.mp4 --headless          # video, no GUI
+python client\camera_client.py --source "rtsp://user:pass@ip:554/stream"
 ```
 
-## Model metrikleri (Aşama 1 — plaka tespiti)
+## Model metrics (Stage 1 — plate detection)
 
-YOLOv8n, **50 epoch**, imgsz 640. Veri seti (Roboflow, tek sınıf `license plate`):
-**train 3150 · valid 345 · test 5** görüntü. Aşağıdaki değerler **validation seti
-(345 görüntü)** üzerinde ölçüldü (`results/metrics.md`):
+YOLOv8n, **50 epochs**, imgsz 640. Dataset (Roboflow, single class
+`license plate`): **train 3150 · valid 345 · test 5** images. The values below
+were measured on the **validation set (345 images)** (`results/metrics.md`):
 
-| Metrik | Değer |
+| Metric | Value |
 |---|---|
 | mAP@0.5 | 0.9375 |
 | mAP@0.5:0.95 | 0.7514 |
 | Precision | 0.8397 |
 | Recall | 0.9345 |
 
-> Bunlar **plaka tespit modelinin** validation metrikleridir — uçtan uca sistem
-> doğruluğu **değildir** (aşağıya bakın). Model kalitesine dair örnek tahminler:
+> These are the **plate-detection model's** validation metrics — they are **not**
+> end-to-end system accuracy (see below). Sample predictions showing model
+> quality:
 
-![val örnek 0](docs/samples/val-ornek-0.jpg)
-![val örnek 3](docs/samples/val-ornek-3.jpg)
+![val sample 0](docs/samples/val-ornek-0.jpg)
+![val sample 3](docs/samples/val-ornek-3.jpg)
 
-## Performans ölçümleri
+## Performance measurements
 
-**Ölçüm ortamı:** NVIDIA GeForce GTX 1650 (4096 MB), Windows 10, Python 3.11.9.
-**İstemci ve sunucu aynı makinede (localhost)** — gerçek ağda RTT artar.
-Aşağıdaki değerler bu makinede `plateTest1.png` (2560×1707) ile ölçüldü:
+**Measurement environment:** NVIDIA GeForce GTX 1650 (4096 MB), Windows 10,
+Python 3.11.9. **Client and server on the same machine (localhost)** — on a real
+network the RTT increases. The values below were measured on this machine with
+`plateTest1.png` (2560×1707):
 
-| Ölçüm | Değer |
+| Measurement | Value |
 |---|---|
-| Sunucu `latency_ms` — soğuk başlangıç (ilk istek, kamera modeli yüklenir) | 518 ms |
-| Sunucu `latency_ms` — ısınmış, OCR tetiklendi | 58–68 ms (ort. ~63) |
-| Sunucu `latency_ms` — ısınmış, OCR yok (oy kararlı) | 29–31 ms |
-| İstemci RTT (localhost) — ısınmış, OCR'lı / OCR'sız | ~77–90 ms / ~48–57 ms |
-| `gpu_memory_reserved_mb` (1 kamera yüklü) | 235 MB (4096 MB'ın %5.7'si) |
-| Backpressure: 40 karelik video | 7 işlendi, 33 atıldı |
+| Server `latency_ms` — cold start (first request, loads the camera's model) | 518 ms |
+| Server `latency_ms` — warm, OCR triggered | 58–68 ms (avg ~63) |
+| Server `latency_ms` — warm, no OCR (vote stable) | 29–31 ms |
+| Client RTT (localhost) — warm, with / without OCR | ~77–90 ms / ~48–57 ms |
+| `gpu_memory_reserved_mb` (1 camera loaded) | 235 MB (5.7% of 4096 MB) |
+| Backpressure: 40-frame video | 7 processed, 33 dropped |
 
-OCR yalnızca bir track için kararlı sonuç oluşana kadar çalışır; oy penceresi
-dolunca durur (yukarıda OCR'sız satır bunu gösterir). Yüksek atılan-kare oranı
-kasıtlıdır: istemci aynı anda **tek istek** tutar, cevap beklenirken gelen kareleri
-kuyruğa almadan atar (gecikme birikmesin diye).
+OCR runs only until a track has a stable result; it stops once the vote window is
+full (the "no OCR" row above shows this). The high drop rate is intentional: the
+client keeps **one request in flight** at a time and drops frames that arrive
+while waiting for a response (so latency does not accumulate).
 
-## Test takımı
+## Test suite
 
-**47 test**, pytest. Dosya bazında: `test_plate_format` 17, `test_vote` 15,
-`test_schemas` 8, `test_box_match` 7. **Hiçbir test model, GPU veya kamera
-gerektirmez** (saf mantık: format doğrulama, oy toplama, kutu eşleştirme, şema).
+**47 tests**, pytest. Per file: `test_plate_format` 17, `test_vote` 15,
+`test_schemas` 8, `test_box_match` 7. **No test requires a model, GPU or camera**
+(pure logic: format validation, vote aggregation, box matching, schema).
 
 ```powershell
 pip install -r requirements-dev.txt
-pytest -q            # repo kökünden
+pytest -q            # from the repository root
 ```
 
-## Proje yapısı
+## Project structure
 
 ```
-shared/plate_format.py   # TR plaka format doğrulaması + OCR karışıklık düzeltme (saf)
-server/schemas.py        # Pydantic istek/cevap sözleşmesi
-server/session.py        # camera_id/track başına oy durumu + saf vote()
-server/inference.py      # araç+plaka tespit, kutu eşleştirme, track başına OCR
+shared/plate_format.py   # TR plate format validation + OCR confusion fixes (pure)
+server/schemas.py        # Pydantic request/response contract
+server/session.py        # per camera_id/track vote state + pure vote()
+server/inference.py      # vehicle+plate detection, box matching, per-track OCR
 server/app.py            # FastAPI: /v1/infer, /health (asyncio lock + executor)
-client/camera_client.py  # ince istemci (opencv+requests); tek-istek + geri çekilme
-tests/                   # pytest (modelsiz)
-config.example.yaml      # sunucu/istemci ayarları (öncelik: CLI>env>yaml>varsayılan)
-# --- Aşama 1 eğitim/çıkarım araçları (CLI, offline) ---
-download_data.py         # Roboflow'dan veri indirme (API anahtarı env'den)
-train.py / resume_training.py / train.ipynb   # plaka modeli eğitimi
-predict.py / pipeline.py / ocr.py             # tekil/klasör çıkarım
-live.py                  # yerel canlı kamera (OpenCV penceresi, sunucusuz)
+client/camera_client.py  # thin client (opencv+requests); single-in-flight + backoff
+tests/                   # pytest (model-free)
+config.example.yaml      # server/client settings (precedence: CLI>env>yaml>default)
+# --- Stage 1 training/inference tools (CLI, offline) ---
+download_data.py         # download data from Roboflow (API key from env)
+train.py / resume_training.py / train.ipynb   # plate model training
+predict.py / pipeline.py / ocr.py             # single/folder inference
+live.py                  # local live camera (OpenCV window, no server)
 ```
 
-## Ağırlık dosyası (`weights/best.pt`)
+## Weights file (`weights/best.pt`)
 
-**Bu dosya repoda YOKTUR** (`.gitignore`'da; eğitilmiş ağırlıklar dağıtılmaz).
-Sunucu bu dosya olmadan **başlamaz** — net bir hatayla durur. Elde etmek için:
+**This file is NOT in the repo** (it is in `.gitignore`; trained weights are not
+distributed). The server **will not start** without it — it stops with a clear
+error. To obtain it:
 
-1. `python download_data.py` — Roboflow'dan veriyi indirin (ücretsiz API anahtarı
-   `.env` içinde `ROBOFLOW_API_KEY` olarak).
-2. `python train.py --batch 8` (veya `train.ipynb`) — Aşama 1 eğitimi; sonunda
-   ağırlık `weights/best.pt` olarak kopyalanır.
+1. `python download_data.py` — download the data from Roboflow (free API key as
+   `ROBOFLOW_API_KEY` in `.env`).
+2. `python train.py --batch 8` (or `train.ipynb`) — Stage 1 training; at the end
+   the weights are copied to `weights/best.pt`.
 
-Araç modeli `yolov8n.pt` (COCO) yoksa Ultralytics tarafından otomatik indirilir —
-yeniden eğitilmez.
+The vehicle model `yolov8n.pt` (COCO) is downloaded automatically by Ultralytics
+if missing — it is not retrained.
 
-## Kapsam dışı (bu aşamada bilerek YOK)
+## Out of scope (deliberately absent at this stage)
 
-Çıktı **yalnızca HTTP cevabı olarak JSON**'dur. Aşağıdakiler **kasıtlı olarak
-yoktur**, sonraki aşamalara bırakılmıştır:
+The output is **JSON over HTTP only**. The following are **intentionally absent**
+and left to later stages:
 
-- Veritabanı / ORM / kalıcı kayıt (durum yalnızca RAM'de)
-- Olay/event, cooldown, tekrar bastırma
-- Beyaz liste / kara liste
-- Bariyer / röle / kapı kontrolü
-- Kullanıcı yönetimi, kimlik doğrulama, API anahtarı
-- Disk'e görüntü/kare kaydetme
-- Docker / konteyner paketleme
+- Database / ORM / persistence (state is in RAM only)
+- Events, cooldown, de-duplication
+- Allow-list / block-list
+- Barrier / relay / gate control
+- User management, authentication, API keys
+- Saving images/frames to disk
+- Docker / container packaging
 
-## Bilinen sınırlamalar (dürüst)
+## Known limitations (honest)
 
-- **Uçtan uca doğrulama bir DUMAN TESTİDİR, doğruluk ölçümü değildir.** Sistem,
-  tek bir test görüntüsü (`plateTest1.png`) ve ondan üretilmiş kısa bir video ile
-  doğrulandı. Bir "sistem doğruluğu %XX" iddiası **yoktur** ve yapılmamalıdır.
-- **Model katmanı için otomatik test yok** — `inference.py` ve FastAPI uçları
-  yalnızca elle duman testiyle doğrulandı (saf mantık testleri var, model yok).
-- **RTSP saha testi yapılmadı** — kod var (`CAP_FFMPEG` + TCP), gerçek kamerayla
-  denenmedi.
-- **Yalnızca Windows'ta doğrulandı.** Linux/macOS'ta denenmedi.
-- **≈40 piksel altındaki plakalarda OCR bozulur** — kaynak çözünürlük sınırı;
-  ön işleme bunu çözmez.
-- **Tek worker / tek GPU** — istekler serileştirilir; yük artarsa gecikme birikir.
-- **Kimlik doğrulama yok** — uçlar tamamen açık (üretimde şart).
-- **Performans rakamları localhost'ta ölçüldü** — gerçek ağda RTT artar.
+- **End-to-end verification is a SMOKE TEST, not an accuracy measurement.** The
+  system was verified with a single test image (`plateTest1.png`) and a short
+  video produced from it. There is **no** "system accuracy XX%" claim, and none
+  should be made.
+- **No automated tests for the model layer** — `inference.py` and the FastAPI
+  endpoints were only smoke-tested by hand (there are pure-logic tests, no model).
+- **RTSP not field-tested** — the code exists (`CAP_FFMPEG` + TCP), but it was
+  not tried with a real camera.
+- **Verified on Windows only.** Not tried on Linux/macOS.
+- **OCR breaks on plates below ≈40 px** — a source-resolution limit; preprocessing
+  does not fix it.
+- **Single worker / single GPU** — requests are serialized; latency accumulates
+  under load.
+- **No authentication** — the endpoints are fully open (required in production).
+- **Performance numbers were measured on localhost** — RTT increases on a real
+  network.
 
-## Lisans ve atıf
+## License and attribution
 
-- Kod: [MIT](LICENSE)
-- Veri seti: **License Plates of Vehicles in Turkey**, Kemal Kılıçaslan,
-  Roboflow Universe — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-  Proje, aynı içeriğin herkese açık bir kopyasından indirir
+- Code: [MIT](LICENSE)
+- Dataset: **License Plates of Vehicles in Turkey**, Kemal Kılıçaslan, Roboflow
+  Universe — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The
+  project downloads from a public mirror of the same content
   (`tr-plaka-recognition/license-plates-of-vehicles-in-turkey-s3tbj-s5lcc`);
-  atıf orijinal yaratıcıya aittir.
+  attribution belongs to the original creator.
 
-Veri seti ve eğitilmiş ağırlıklar bu repoda **dağıtılmaz**.
+The dataset and trained weights are **not distributed** in this repo.
